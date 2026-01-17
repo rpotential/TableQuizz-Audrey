@@ -17,6 +17,12 @@ const TENSES = {
     nameEn: "Present",
     description: "Actions happening now, habits, general truths",
     descriptionFr: "Actions actuelles, habitudes, vérités générales",
+    usageEn: "Habits, facts, and actions happening now",
+    usageFr: "Habitudes, faits, actions en cours",
+    signalWords: ["aujourd'hui", "souvent", "toujours", "chaque jour"],
+    formationEn: "For -er verbs: stem + e/es/e/ons/ez/ent",
+    formationFr: "Pour les verbes en -er : radical + e/es/e/ons/ez/ent",
+    example: { fr: "Aujourd'hui, je parle français.", en: "Today, I speak French." },
     color: "#f8bbd9",
   },
   passeCompose: {
@@ -24,6 +30,12 @@ const TENSES = {
     nameEn: "Past (completed)",
     description: "Completed actions in the past",
     descriptionFr: "Actions terminées dans le passé",
+    usageEn: "Completed actions, specific events",
+    usageFr: "Action ponctuelle et terminée",
+    signalWords: ["hier", "la semaine dernière", "déjà", "ce matin"],
+    formationEn: "avoir/être + past participle",
+    formationFr: "avoir/être + participe passé",
+    example: { fr: "Hier, j'ai mangé.", en: "Yesterday, I ate." },
     color: "#ce93d8",
   },
   imparfait: {
@@ -31,6 +43,15 @@ const TENSES = {
     nameEn: "Imperfect",
     description: "Ongoing or habitual past actions, descriptions",
     descriptionFr: "Actions continues ou habituelles dans le passé",
+    usageEn: "Ongoing past, habits, background descriptions",
+    usageFr: "Habitudes, descriptions, arrière-plan",
+    signalWords: ["quand j'étais", "souvent", "tous les jours", "à l'époque"],
+    formationEn: "nous form – ons + ais/ais/ait/ions/iez/aient",
+    formationFr: "radical de nous – ons + ais/ais/ait/ions/iez/aient",
+    example: {
+      fr: "Quand j'étais jeune, je jouais dehors.",
+      en: "When I was young, I used to play outside."
+    },
     color: "#b39ddb",
   },
   futurSimple: {
@@ -38,6 +59,12 @@ const TENSES = {
     nameEn: "Future",
     description: "Actions that will happen",
     descriptionFr: "Actions qui vont se produire",
+    usageEn: "Future actions, promises, predictions",
+    usageFr: "Actions futures, promesses, prédictions",
+    signalWords: ["demain", "bientôt", "la semaine prochaine"],
+    formationEn: "infinitive + ai/as/a/ons/ez/ont",
+    formationFr: "infinitif + ai/as/a/ons/ez/ont",
+    example: { fr: "Demain, je partirai.", en: "Tomorrow, I will leave." },
     color: "#90caf9",
   },
   conditionnelPresent: {
@@ -45,6 +72,12 @@ const TENSES = {
     nameEn: "Conditional",
     description: "Would do something, polite requests",
     descriptionFr: "Actions conditionnelles, demandes polies",
+    usageEn: "Hypothetical situations and polite requests",
+    usageFr: "Hypothèses et demandes polies",
+    signalWords: ["si", "voudrais", "pourrais", "au cas où"],
+    formationEn: "future stem + imparfait endings",
+    formationFr: "radical du futur + terminaisons de l'imparfait",
+    example: { fr: "Je voudrais un café.", en: "I would like a coffee." },
     color: "#80deea",
   },
   subjonctifPresent: {
@@ -52,9 +85,45 @@ const TENSES = {
     nameEn: "Subjunctive",
     description: "Wishes, doubts, emotions, necessities",
     descriptionFr: "Souhaits, doutes, émotions, nécessités",
+    usageEn: "Wishes, doubt, necessity after “que”",
+    usageFr: "Souhaits, doute, nécessité après « que »",
+    signalWords: ["il faut que", "bien que", "pour que", "je veux que"],
+    formationEn: "often from 'ils' present stem + e/es/e/ions/iez/ent",
+    formationFr: "souvent du radical de « ils » + e/es/e/ions/iez/ent",
+    example: { fr: "Il faut que je sois prête.", en: "I must be ready." },
     color: "#a5d6a7",
   },
 };
+
+const VERB_GROUPS = [
+  {
+    id: "1er",
+    name: "1er groupe (-er)",
+    descriptionEn: "Regular -er verbs, the biggest group.",
+    descriptionFr: "Verbes en -er, très réguliers.",
+    rulesEn: "Drop -er, add e/es/e/ons/ez/ent.",
+    rulesFr: "Enlever -er, ajouter e/es/e/ons/ez/ent.",
+    examples: ["parler", "aimer", "manger"]
+  },
+  {
+    id: "2e",
+    name: "2e groupe (-ir)",
+    descriptionEn: "Regular -ir verbs with -issons in nous.",
+    descriptionFr: "Verbes en -ir réguliers avec -issons à nous.",
+    rulesEn: "Drop -ir, add is/is/it/issons/issez/issent.",
+    rulesFr: "Enlever -ir, ajouter is/is/it/issons/issez/issent.",
+    examples: ["finir", "choisir", "grandir"]
+  },
+  {
+    id: "3e",
+    name: "3e groupe (irréguliers)",
+    descriptionEn: "Irregular verbs: -re, -oir, many -ir.",
+    descriptionFr: "Verbes irréguliers : -re, -oir, beaucoup de -ir.",
+    rulesEn: "No single pattern; learn common stems.",
+    rulesFr: "Pas de règle unique; apprendre les radicaux.",
+    examples: ["venir", "prendre", "avoir"]
+  }
+];
 
 const VERBS = {
   etre: {

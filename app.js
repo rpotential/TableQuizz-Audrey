@@ -20,6 +20,11 @@
     reviewList: [],
     selectedVerbs: [],
     selectedTenses: [],
+    flashMode: "en-fr",
+    flashSeen: 0,
+    flashCorrect: 0,
+    flashCurrent: null,
+    flashFlipped: false,
   };
 
   const XP_PER_LEVEL = 100;
@@ -49,13 +54,27 @@
     elements.scoreValue = document.getElementById("score-value");
     elements.countValue = document.getElementById("count-value");
     elements.reviewList = document.getElementById("review-list");
+    elements.tenseGuide = document.getElementById("tense-guide");
+    elements.tenseGuides = document.getElementById("tense-guides");
+    elements.verbGroups = document.getElementById("verb-groups");
+    elements.flashFront = document.getElementById("flash-front");
+    elements.flashBack = document.getElementById("flash-back");
+    elements.flashFlip = document.getElementById("flash-flip");
+    elements.flashKnown = document.getElementById("flash-known");
+    elements.flashMissed = document.getElementById("flash-missed");
+    elements.flashSeen = document.getElementById("flash-seen");
+    elements.flashCorrect = document.getElementById("flash-correct");
+    elements.flashAccuracy = document.getElementById("flash-accuracy");
+    elements.flashModeButtons = document.querySelectorAll("[data-flash-mode]");
 
     loadProgress();
     renderTables();
+    renderLearn();
     setupEventListeners();
     generateNewQuestion();
     updateUI();
     setQuizEnabled(true);
+    initFlashcards();
   }
 
   function renderTables() {
@@ -85,9 +104,7 @@
     card.dataset.verb = verbKey;
 
     var tableRows = PRONOUNS.map(function(pronoun, i) {
-      var shouldElide = pronoun.elided && verb.startsWithVowel;
-      var displayPronoun = shouldElide ? pronoun.elided : pronoun.fr;
-      var frenchLine = (shouldElide ? displayPronoun : displayPronoun + " ") + conjugations[i];
+      var frenchLine = buildFrenchLine(pronoun, conjugations[i], verb);
       return '<tr><td class="french-cell">' + frenchLine + 
              '</td><td class="english-cell">' + pronoun.en + '</td></tr>';
     }).join("");
@@ -108,6 +125,23 @@
     return card;
   }
 
+  function verbStartsWithVowel(verb) {
+    if (typeof verb.startsWithVowel === "boolean") return verb.startsWithVowel;
+    var word = verb.infinitive || "";
+    return /^[aeiouhâêîôûéèëïüœ]/i.test(word);
+  }
+
+  function getPronounDisplay(pronoun, verb) {
+    if (pronoun.elided && verbStartsWithVowel(verb)) return pronoun.elided;
+    return pronoun.fr;
+  }
+
+  function buildFrenchLine(pronoun, conjugation, verb) {
+    var displayPronoun = getPronounDisplay(pronoun, verb);
+    if (displayPronoun === "j'") return displayPronoun + conjugation;
+    return displayPronoun + " " + conjugation;
+  }
+
   function generateNewQuestion() {
     var verbKeys = Object.keys(VERBS);
     var randomVerbKey = verbKeys[Math.floor(Math.random() * verbKeys.length)];
@@ -123,11 +157,10 @@
 
   function displayQuestion() {
     var pronoun = PRONOUNS[state.currentPronounIndex];
-    var shouldElide = pronoun.elided && state.currentVerb.startsWithVowel;
-    var displayPronoun = shouldElide ? pronoun.elided : pronoun.fr;
+    var displayPronoun = getPronounDisplay(pronoun, state.currentVerb);
 
     if (elements.tenseLabel) {
-      elements.tenseLabel.textContent = state.currentTense.name;
+      elements.tenseLabel.textContent = state.currentTense.name + " · " + state.currentTense.nameEn;
       elements.tenseLabel.className = "tense-badge tense-" + state.currentTense.key;
     }
     if (elements.verbLabel) {
@@ -144,6 +177,7 @@
       elements.feedback.textContent = "";
       elements.feedback.className = "feedback";
     }
+    updateTenseGuide();
   }
 
   function checkAnswer() {
@@ -195,7 +229,7 @@
     var variants = [answer, answer.replace(/\([^)]*\)/g, "")];
     var pronounParts = pronoun.fr.split("/").map(function(item) { return item.trim(); }).filter(Boolean);
     pronounParts.forEach(function(part) {
-      if (part === "je" && pronoun.elided && verb.startsWithVowel) {
+      if (part === "je" && pronoun.elided && verbStartsWithVowel(verb)) {
         variants.push(pronoun.elided + answer);
         variants.push("je " + answer);
       } else {
@@ -242,7 +276,8 @@
   function handleIncorrectAnswer(correctAnswer) {
     state.streak = 0;
     addToReview(correctAnswer);
-    elements.feedback.innerHTML = "La réponse : <strong>" + correctAnswer + "</strong>";
+    var explanation = buildTenseExplanation(state.currentTense.key);
+    elements.feedback.innerHTML = "La réponse : <strong>" + correctAnswer + "</strong>" + explanation;
     elements.feedback.className = "feedback incorrect";
     elements.answerInput.classList.add("shake");
     setTimeout(function() { elements.answerInput.classList.remove("shake"); }, 300);
@@ -258,7 +293,8 @@
     state.streak = 0;
     var correctAnswer = state.currentVerb.tenses[state.currentTense.key][state.currentPronounIndex];
     addToReview(correctAnswer);
-    elements.feedback.innerHTML = "Skipped. Réponse : <strong>" + correctAnswer + "</strong>";
+    var explanation = buildTenseExplanation(state.currentTense.key);
+    elements.feedback.innerHTML = "Skipped. Réponse : <strong>" + correctAnswer + "</strong>" + explanation;
     elements.feedback.className = "feedback incorrect";
     updateUI();
     saveProgress();
@@ -334,6 +370,162 @@
     }).join("");
   }
 
+  function buildTenseExplanation(tenseKey) {
+    var tense = TENSES[tenseKey];
+    if (!tense) return "";
+    var usage = tense.usageEn && tense.usageFr ? tense.usageEn + " / " + tense.usageFr : "";
+    var formation = tense.formationEn && tense.formationFr ? tense.formationEn + " / " + tense.formationFr : "";
+    var example = tense.example ? tense.example.fr + " — " + tense.example.en : "";
+    var signals = Array.isArray(tense.signalWords) ? tense.signalWords.join(", ") : "";
+    return (
+      '<div class="feedback-explain">' +
+        (usage ? "<div><strong>When:</strong> " + usage + "</div>" : "") +
+        (formation ? "<div><strong>Build:</strong> " + formation + "</div>" : "") +
+        (signals ? "<div><strong>Signal words:</strong> " + signals + "</div>" : "") +
+        (example ? "<div><strong>Example:</strong> " + example + "</div>" : "") +
+      "</div>"
+    );
+  }
+
+  function updateTenseGuide() {
+    if (!elements.tenseGuide || !state.currentTense) return;
+    var tense = TENSES[state.currentTense.key];
+    if (!tense) {
+      elements.tenseGuide.textContent = "";
+      return;
+    }
+    var usage = tense.usageEn && tense.usageFr ? tense.usageEn + " / " + tense.usageFr : "";
+    var formation = tense.formationEn && tense.formationFr ? tense.formationEn + " / " + tense.formationFr : "";
+    var example = tense.example ? tense.example.fr + " — " + tense.example.en : "";
+    var signals = Array.isArray(tense.signalWords) ? tense.signalWords.join(", ") : "";
+    elements.tenseGuide.innerHTML =
+      '<div><strong>When:</strong> ' + usage + '</div>' +
+      '<div><strong>Build:</strong> ' + formation + '</div>' +
+      '<div><strong>Signal words:</strong> ' + signals + '</div>' +
+      '<div><strong>Example:</strong> ' + example + '</div>';
+  }
+
+  function renderLearn() {
+    if (elements.tenseGuides) {
+      elements.tenseGuides.innerHTML = Object.entries(TENSES).map(function(entry) {
+        var tense = entry[1];
+        var signals = Array.isArray(tense.signalWords) ? tense.signalWords.join(", ") : "";
+        return (
+          '<div class="guide-card">' +
+            '<h4>' + tense.name + ' <span>(' + tense.nameEn + ')</span></h4>' +
+            '<p>' + tense.descriptionFr + " — " + tense.description + '</p>' +
+            '<div class="guide-list">' +
+              '<div><strong>When:</strong> ' + tense.usageEn + " / " + tense.usageFr + '</div>' +
+              '<div><strong>Build:</strong> ' + tense.formationEn + " / " + tense.formationFr + '</div>' +
+              '<div><strong>Signal words:</strong> ' + signals + '</div>' +
+              '<div><strong>Example:</strong> ' + tense.example.fr + " — " + tense.example.en + '</div>' +
+            '</div>' +
+          '</div>'
+        );
+      }).join("");
+    }
+
+    if (elements.verbGroups && typeof VERB_GROUPS !== "undefined") {
+      elements.verbGroups.innerHTML = VERB_GROUPS.map(function(group) {
+        return (
+          '<div class="guide-card">' +
+            '<h4>' + group.name + '</h4>' +
+            '<p>' + group.descriptionFr + " / " + group.descriptionEn + '</p>' +
+            '<div class="guide-list">' +
+              '<div><strong>Rule:</strong> ' + group.rulesFr + " / " + group.rulesEn + '</div>' +
+              '<div><strong>Examples:</strong> ' + group.examples.join(", ") + '</div>' +
+            '</div>' +
+          '</div>'
+        );
+      }).join("");
+    }
+  }
+
+  function initFlashcards() {
+    if (!elements.flashFront || !elements.flashBack) return;
+    setFlashMode("en-fr");
+    updateFlashStats();
+    renderFlashcard();
+  }
+
+  function setFlashMode(mode) {
+    state.flashMode = mode;
+    state.flashFlipped = false;
+    elements.flashModeButtons.forEach(function(btn) {
+      btn.classList.toggle("active", btn.dataset.flashMode === mode);
+    });
+    renderFlashcard();
+  }
+
+  function generateFlashcard() {
+    var verbKeys = Object.keys(VERBS);
+    var verbKey = verbKeys[Math.floor(Math.random() * verbKeys.length)];
+    var verb = VERBS[verbKey];
+
+    var tenseKeys = Object.keys(TENSES);
+    var tenseKey = tenseKeys[Math.floor(Math.random() * tenseKeys.length)];
+    var tense = TENSES[tenseKey];
+
+    var pronounIndex = Math.floor(Math.random() * PRONOUNS.length);
+    var pronoun = PRONOUNS[pronounIndex];
+    var conjugation = verb.tenses[tenseKey][pronounIndex];
+
+    return {
+      verbKey: verbKey,
+      verb: verb,
+      tenseKey: tenseKey,
+      tense: tense,
+      pronounIndex: pronounIndex,
+      pronoun: pronoun,
+      conjugation: conjugation
+    };
+  }
+
+  function renderFlashcard() {
+    if (!elements.flashFront || !elements.flashBack) return;
+    state.flashCurrent = generateFlashcard();
+    var card = state.flashCurrent;
+    var frenchLine = buildFrenchLine(card.pronoun, card.conjugation, card.verb);
+    var prompt = card.pronoun.en + " — " + card.verb.english + " (" + card.tense.name + ")";
+
+    if (state.flashMode === "en-fr") {
+      elements.flashFront.innerHTML =
+        '<div><strong>EN → FR</strong></div>' +
+        '<div>' + prompt + '</div>';
+      elements.flashBack.innerHTML =
+        '<div>' + frenchLine + '</div>' +
+        '<div class="feedback-explain">Build: ' + card.tense.formationEn + '</div>';
+    } else {
+      elements.flashFront.innerHTML =
+        '<div><strong>FR → EN</strong></div>' +
+        '<div>' + frenchLine + '</div>';
+      elements.flashBack.innerHTML =
+        '<div>' + prompt + '</div>' +
+        '<div class="feedback-explain">Use: ' + card.tense.usageEn + '</div>';
+    }
+
+    setFlashFlipped(false);
+  }
+
+  function setFlashFlipped(flipped) {
+    state.flashFlipped = flipped;
+    elements.flashBack.classList.toggle("is-hidden", !flipped);
+  }
+
+  function handleFlashResult(isCorrect) {
+    state.flashSeen += 1;
+    if (isCorrect) state.flashCorrect += 1;
+    updateFlashStats();
+    renderFlashcard();
+  }
+
+  function updateFlashStats() {
+    if (elements.flashSeen) elements.flashSeen.textContent = state.flashSeen;
+    if (elements.flashCorrect) elements.flashCorrect.textContent = state.flashCorrect;
+    var accuracy = state.flashSeen ? Math.round((state.flashCorrect / state.flashSeen) * 100) : 0;
+    if (elements.flashAccuracy) elements.flashAccuracy.textContent = accuracy + "%";
+  }
+
   function setupEventListeners() {
     document.querySelectorAll(".tab").forEach(function(tab) {
       tab.addEventListener("click", function() {
@@ -348,6 +540,32 @@
     if (elements.answerInput) {
       elements.answerInput.addEventListener("keypress", function(e) {
         if (e.key === "Enter") checkAnswer();
+      });
+    }
+
+    if (elements.flashFlip) {
+      elements.flashFlip.addEventListener("click", function() {
+        setFlashFlipped(!state.flashFlipped);
+      });
+    }
+
+    if (elements.flashKnown) {
+      elements.flashKnown.addEventListener("click", function() {
+        handleFlashResult(true);
+      });
+    }
+
+    if (elements.flashMissed) {
+      elements.flashMissed.addEventListener("click", function() {
+        handleFlashResult(false);
+      });
+    }
+
+    if (elements.flashModeButtons && elements.flashModeButtons.length) {
+      elements.flashModeButtons.forEach(function(btn) {
+        btn.addEventListener("click", function() {
+          setFlashMode(btn.dataset.flashMode);
+        });
       });
     }
 
@@ -381,6 +599,7 @@
     });
 
     if (viewName === "quiz" && elements.answerInput) elements.answerInput.focus();
+    if (viewName === "flashcards") renderFlashcard();
   }
 
   function resetQuizState() {

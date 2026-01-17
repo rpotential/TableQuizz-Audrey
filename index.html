@@ -81,6 +81,8 @@
           Tables / Tables
         </button>
         <button class="tab" data-view="quiz">Quiz / Game</button>
+        <button class="tab" data-view="learn">Learn / Learn</button>
+        <button class="tab" data-view="flashcards">Flashcards</button>
       </nav>
 
       <main>
@@ -147,6 +149,7 @@
                     <div id="feedback" class="feedback"></div>
                   </div>
                 </div>
+                <div id="tense-guide" class="tense-guide"></div>
               </div>
             </div>
 
@@ -165,6 +168,67 @@
               <div id="review-list" class="review-list"></div>
               <div class="tip">
                 Tip: short, daily sessions beat cramming.
+              </div>
+            </aside>
+          </div>
+        </section>
+
+        <section id="learn" class="view">
+          <div class="card intro-card">
+            <h2>Learn — Tenses & Verb Groups</h2>
+            <p>
+              English explanations, French usage, and patterns so she can apply
+              rules to any verb.
+            </p>
+          </div>
+          <div class="learn-grid" id="tense-guides"></div>
+          <div class="card learn-card">
+            <h3>Verb Groups / Groupes de verbes</h3>
+            <div class="learn-grid" id="verb-groups"></div>
+          </div>
+        </section>
+
+        <section id="flashcards" class="view">
+          <div class="flash-layout">
+            <div class="card flash-card" id="flashcard">
+              <div class="flash-header">
+                <div>
+                  <h2>Flashcards</h2>
+                  <p>English ↔ French, with tense clues.</p>
+                </div>
+                <div class="mode-buttons" role="group">
+                  <button class="mode-btn active" data-flash-mode="en-fr">
+                    EN → FR
+                  </button>
+                  <button class="mode-btn" data-flash-mode="fr-en">
+                    FR → EN
+                  </button>
+                </div>
+              </div>
+              <div class="flash-face" id="flash-front"></div>
+              <div class="flash-face flash-back" id="flash-back"></div>
+              <div class="flash-actions">
+                <button class="ghost" id="flash-flip">Flip</button>
+                <button class="ghost" id="flash-missed">Missed</button>
+                <button class="primary" id="flash-known">Got it</button>
+              </div>
+            </div>
+            <aside class="card side-card">
+              <h3>Flash Stats</h3>
+              <div class="progress-row">
+                <span>Seen</span>
+                <strong id="flash-seen">0</strong>
+              </div>
+              <div class="progress-row">
+                <span>Correct</span>
+                <strong id="flash-correct">0</strong>
+              </div>
+              <div class="progress-row">
+                <span>Accuracy</span>
+                <strong id="flash-accuracy">0%</strong>
+              </div>
+              <div class="tip">
+                Tip: say the answer out loud before flipping.
               </div>
             </aside>
           </div>
