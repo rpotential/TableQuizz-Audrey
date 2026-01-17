@@ -175,8 +175,15 @@ const showFeedback = (message, isGood) => {
   els.feedback.className = `feedback ${isGood ? "good" : "bad"}`;
 };
 
+const isTimedOver = () =>
+  state.mode === "timed" && state.timeLeft <= 0;
+
 const checkAnswer = () => {
   if (!state.current) return;
+  if (isTimedOver()) {
+    showFeedback("Sprint finished. Switch mode to restart.", false);
+    return;
+  }
   const { verb, tense, pronoun } = state.current;
   const expected = verb.conjugations[tense.id][pronoun.key];
   const answer = normalize(els.answerInput.value);
@@ -201,7 +208,15 @@ const checkAnswer = () => {
 };
 
 const skipQuestion = () => {
+  if (!state.current) return;
+  if (isTimedOver()) {
+    showFeedback("Sprint finished. Switch mode to restart.", false);
+    return;
+  }
+  state.total += 1;
+  state.streak = 0;
   addToReview(state.current);
+  updateStats();
   showFeedback("Skipped. It will come back soon.", false);
   setTimeout(showQuestion, 500);
 };
@@ -230,6 +245,7 @@ const startTimer = () => {
     els.timer.textContent = `${minutes}:${seconds}`;
     if (state.timeLeft <= 0) {
       stopTimer();
+      state.timeLeft = 0;
       els.timer.textContent = "Time!";
       showFeedback("Sprint finished. Switch mode to restart.", false);
     }
