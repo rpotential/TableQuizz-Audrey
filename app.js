@@ -10,6 +10,7 @@ const state = {
     isTimerRunning: false,
     timerInterval: null,
     timeRemaining: 60,
+    isAnswerLocked: false,
   score: 0,
     correct: 0,
     total: 0,
@@ -104,7 +105,7 @@ const state = {
     card.dataset.verb = verbKey;
 
     var tableRows = PRONOUNS.map(function(pronoun, i) {
-      var frenchLine = buildFrenchLine(pronoun, conjugations[i], verb);
+      var frenchLine = buildFrenchLine(pronoun, conjugations[i]);
       return '<tr><td class="french-cell">' + frenchLine + 
              '</td><td class="english-cell">' + pronoun.en + '</td></tr>';
     }).join("");
@@ -125,10 +126,13 @@ const state = {
     return card;
   }
 
-  function verbStartsWithVowel(verb) {
-    if (typeof verb.startsWithVowel === "boolean") return verb.startsWithVowel;
-    var word = verb.infinitive || "";
-    return /^[aeiouhâêîôûéèëïüœ]/i.test(word);
+  function startsWithVowelSound(word) {
+    if (!word) return false;
+    var normalized = word
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+    return /^[aeiouh]/.test(normalized);
   }
 
   function getFlashPronoun(pronoun) {
@@ -149,13 +153,13 @@ const state = {
     }
   }
 
-  function getPronounDisplay(pronoun, verb) {
-    if (pronoun.elided && verbStartsWithVowel(verb)) return pronoun.elided;
+  function getPronounDisplay(pronoun, conjugation) {
+    if (pronoun.elided && startsWithVowelSound(conjugation)) return pronoun.elided;
     return pronoun.fr;
   }
 
-  function buildFrenchLine(pronoun, conjugation, verb) {
-    var displayPronoun = getPronounDisplay(pronoun, verb);
+  function buildFrenchLine(pronoun, conjugation) {
+    var displayPronoun = getPronounDisplay(pronoun, conjugation);
     if (displayPronoun === "j'") return displayPronoun + conjugation;
     return displayPronoun + " " + conjugation;
   }
@@ -214,6 +218,7 @@ const state = {
   }
 
   function generateNewQuestion() {
+    state.isAnswerLocked = false;
     var verbKeys = Object.keys(VERBS);
     var randomVerbKey = verbKeys[Math.floor(Math.random() * verbKeys.length)];
     state.currentVerb = Object.assign({ key: randomVerbKey }, VERBS[randomVerbKey]);
@@ -228,7 +233,8 @@ const state = {
 
   function displayQuestion() {
     var pronoun = PRONOUNS[state.currentPronounIndex];
-    var displayPronoun = getPronounDisplay(pronoun, state.currentVerb);
+    var conjugation = state.currentVerb.tenses[state.currentTense.key][state.currentPronounIndex];
+    var displayPronoun = getPronounDisplay(pronoun, conjugation);
 
     if (elements.tenseLabel) {
       elements.tenseLabel.textContent = state.currentTense.name + " · " + state.currentTense.nameEn;
@@ -257,6 +263,8 @@ const state = {
       elements.feedback.className = "feedback incorrect";
       return;
     }
+    if (state.isAnswerLocked) return;
+    state.isAnswerLocked = true;
     var userAnswer = elements.answerInput.value.trim().toLowerCase();
     var correctAnswer = state.currentVerb.tenses[state.currentTense.key][state.currentPronounIndex];
 
@@ -300,7 +308,7 @@ const state = {
     var variants = [answer, answer.replace(/\([^)]*\)/g, "")];
     var pronounParts = pronoun.fr.split("/").map(function(item) { return item.trim(); }).filter(Boolean);
     pronounParts.forEach(function(part) {
-      if (part === "je" && pronoun.elided && verbStartsWithVowel(verb)) {
+      if (part === "je" && pronoun.elided && startsWithVowelSound(answer)) {
         variants.push(pronoun.elided + answer);
         variants.push("je " + answer);
       } else {
@@ -360,6 +368,8 @@ const state = {
       elements.feedback.className = "feedback incorrect";
       return;
     }
+    if (state.isAnswerLocked) return;
+    state.isAnswerLocked = true;
     state.total++;
     state.streak = 0;
     var correctAnswer = state.currentVerb.tenses[state.currentTense.key][state.currentPronounIndex];
@@ -557,7 +567,7 @@ const state = {
     state.flashCurrent = generateFlashcard();
     var card = state.flashCurrent;
     var flashPronoun = getFlashPronoun(card.pronoun);
-    var frenchLine = buildFrenchLine({ fr: flashPronoun.fr, elided: card.pronoun.elided }, card.conjugation, card.verb);
+    var frenchLine = buildFrenchLine({ fr: flashPronoun.fr, elided: card.pronoun.elided }, card.conjugation);
     var englishPrompt = buildEnglishPrompt(card.verb, card.tenseKey, card.pronoun);
 
     if (state.flashMode === "en-fr") {
@@ -657,6 +667,8 @@ const state = {
           clearInterval(state.timerInterval);
           state.isTimerRunning = false;
           state.timeRemaining = 60;
+          resetQuizState();
+          generateNewQuestion();
           if (elements.timer) elements.timer.textContent = "Ready";
           setQuizEnabled(true);
         }
