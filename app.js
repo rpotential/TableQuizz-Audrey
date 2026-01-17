@@ -1,289 +1,354 @@
-const STORAGE_KEY = "tablequizz-progress";
+// TableQuizz — App Logic
+(function () {
+  "use strict";
 
-const state = {
-  mode: "practice",
-  score: 0,
-  streak: 0,
-  xp: 0,
-  level: 1,
-  correct: 0,
-  total: 0,
-  reviewPool: [],
-  current: null,
-  timerId: null,
-  timeLeft: 60
-};
+  const state = {
+    currentVerb: null,
+    currentTense: null,
+    currentPronounIndex: 0,
+    mode: "practice",
+    isTimerRunning: false,
+    timerInterval: null,
+    timeRemaining: 60,
+    score: 0,
+    correct: 0,
+    total: 0,
+    streak: 0,
+    maxStreak: 0,
+    xp: 0,
+    level: 1,
+    reviewList: [],
+    selectedVerbs: [],
+    selectedTenses: [],
+  };
 
-const els = {
-  tabs: document.querySelectorAll(".tab"),
-  views: document.querySelectorAll(".view"),
-  tablesGrid: document.getElementById("tables-grid"),
-  tenseLabel: document.getElementById("tense-label"),
-  verbLabel: document.getElementById("verb-label"),
-  pronounFr: document.getElementById("pronoun-fr"),
-  pronounEn: document.getElementById("pronoun-en"),
-  answerInput: document.getElementById("answer-input"),
-  submitBtn: document.getElementById("submit-answer"),
-  skipBtn: document.getElementById("skip-question"),
-  feedback: document.getElementById("feedback"),
-  scoreValue: document.getElementById("score-value"),
-  countValue: document.getElementById("count-value"),
-  levelValue: document.getElementById("level-value"),
-  xpValue: document.getElementById("xp-value"),
-  streakValue: document.getElementById("streak-value"),
-  accuracyValue: document.getElementById("accuracy-value"),
-  timer: document.getElementById("timer"),
-  modeButtons: document.querySelectorAll(".mode-btn"),
-  reviewList: document.getElementById("review-list")
-};
+  const XP_PER_LEVEL = 100;
+  const XP_PER_CORRECT = 10;
+  const XP_STREAK_BONUS = 5;
 
-const normalize = (value) =>
-  value
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/\s+/g, " ");
+  const elements = {};
 
-const saveProgress = () => {
-  localStorage.setItem(
-    STORAGE_KEY,
-    JSON.stringify({
-      score: state.score,
-      streak: state.streak,
+  function init() {
+    // Cache DOM elements
+    elements.tablesView = document.getElementById("tables");
+    elements.quizView = document.getElementById("quiz");
+    elements.tablesGrid = document.getElementById("tables-grid");
+    elements.tenseLabel = document.getElementById("tense-label");
+    elements.verbLabel = document.getElementById("verb-label");
+    elements.pronounFr = document.getElementById("pronoun-fr");
+    elements.pronounEn = document.getElementById("pronoun-en");
+    elements.answerInput = document.getElementById("answer-input");
+    elements.submitBtn = document.getElementById("submit-answer");
+    elements.skipBtn = document.getElementById("skip-question");
+    elements.feedback = document.getElementById("feedback");
+    elements.timer = document.getElementById("timer");
+    elements.levelValue = document.getElementById("level-value");
+    elements.xpValue = document.getElementById("xp-value");
+    elements.streakValue = document.getElementById("streak-value");
+    elements.accuracyValue = document.getElementById("accuracy-value");
+    elements.scoreValue = document.getElementById("score-value");
+    elements.countValue = document.getElementById("count-value");
+    elements.reviewList = document.getElementById("review-list");
+
+    loadProgress();
+    renderTables();
+    setupEventListeners();
+    generateNewQuestion();
+    updateUI();
+  }
+
+  function renderTables() {
+    const grid = elements.tablesGrid;
+    if (!grid) return;
+    grid.innerHTML = "";
+
+    Object.entries(VERBS).forEach(function(verbEntry) {
+      var verbKey = verbEntry[0];
+      var verb = verbEntry[1];
+      Object.entries(TENSES).forEach(function(tenseEntry) {
+        var tenseKey = tenseEntry[0];
+        var tense = tenseEntry[1];
+        var card = createConjugationCard(verb, verbKey, tense, tenseKey);
+        grid.appendChild(card);
+      });
+    });
+  }
+
+  function createConjugationCard(verb, verbKey, tense, tenseKey) {
+    var card = document.createElement("div");
+    card.className = "conjugation-card";
+    card.dataset.tense = tenseKey;
+    card.dataset.verb = verbKey;
+
+    var conjugations = verb.tenses[tenseKey];
+
+    var tableRows = PRONOUNS.map(function(pronoun, i) {
+      var shouldElide = pronoun.elided && verb.startsWithVowel;
+      var displayPronoun = shouldElide ? pronoun.elided : pronoun.fr;
+      return '<tr><td class="pronoun-cell"><span class="pronoun-fr">' + displayPronoun + 
+             '</span><span class="pronoun-en">' + pronoun.en + 
+             '</span></td><td class="conjugation-cell">' + conjugations[i] + '</td></tr>';
+    }).join("");
+
+    card.innerHTML = 
+      '<div class="conjugation-header">' +
+        '<h3>' + verb.infinitive + ' — ' + verb.english + '</h3>' +
+        '<div class="conjugation-meta">' +
+          '<span class="tense-badge tense-' + tenseKey + '">' + tense.name + '</span>' +
+          '<span class="verb-badge">' + verb.group + '</span>' +
+        '</div>' +
+      '</div>' +
+      '<table class="conjugation-table"><tbody>' + tableRows + '</tbody></table>';
+
+    return card;
+  }
+
+  function generateNewQuestion() {
+    var verbKeys = Object.keys(VERBS);
+    var randomVerbKey = verbKeys[Math.floor(Math.random() * verbKeys.length)];
+    state.currentVerb = Object.assign({ key: randomVerbKey }, VERBS[randomVerbKey]);
+
+    var tenseKeys = Object.keys(TENSES);
+    var randomTenseKey = tenseKeys[Math.floor(Math.random() * tenseKeys.length)];
+    state.currentTense = Object.assign({ key: randomTenseKey }, TENSES[randomTenseKey]);
+
+    state.currentPronounIndex = Math.floor(Math.random() * PRONOUNS.length);
+    displayQuestion();
+  }
+
+  function displayQuestion() {
+    var pronoun = PRONOUNS[state.currentPronounIndex];
+    var shouldElide = pronoun.elided && state.currentVerb.startsWithVowel;
+    var displayPronoun = shouldElide ? pronoun.elided : pronoun.fr;
+
+    if (elements.tenseLabel) {
+      elements.tenseLabel.textContent = state.currentTense.name;
+      elements.tenseLabel.className = "tense-badge tense-" + state.currentTense.key;
+    }
+    if (elements.verbLabel) {
+      elements.verbLabel.textContent = state.currentVerb.infinitive + " (" + state.currentVerb.english + ")";
+    }
+    if (elements.pronounFr) elements.pronounFr.textContent = displayPronoun;
+    if (elements.pronounEn) elements.pronounEn.textContent = "(" + pronoun.en + ")";
+
+    if (elements.answerInput) {
+      elements.answerInput.value = "";
+      elements.answerInput.focus();
+    }
+    if (elements.feedback) {
+      elements.feedback.textContent = "";
+      elements.feedback.className = "feedback";
+    }
+  }
+
+  function checkAnswer() {
+    var userAnswer = elements.answerInput.value.trim().toLowerCase();
+    var correctAnswer = state.currentVerb.tenses[state.currentTense.key][state.currentPronounIndex];
+
+    var normalizedUser = normalizeAnswer(userAnswer);
+    var normalizedCorrect = normalizeAnswer(correctAnswer);
+    var normalizedWithoutParens = normalizeAnswer(correctAnswer.replace(/\([^)]*\)/g, ""));
+
+    var isCorrect = normalizedUser === normalizedCorrect || normalizedUser === normalizedWithoutParens;
+
+    state.total++;
+
+    if (isCorrect) {
+      handleCorrectAnswer();
+    } else {
+      handleIncorrectAnswer(correctAnswer);
+    }
+
+    updateUI();
+    saveProgress();
+
+    setTimeout(function() {
+      generateNewQuestion();
+    }, isCorrect ? 800 : 2000);
+  }
+
+  function normalizeAnswer(str) {
+    return str.toLowerCase().trim().replace(/\s+/g, " ").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  }
+
+  function handleCorrectAnswer() {
+    state.correct++;
+    state.streak++;
+    if (state.streak > state.maxStreak) state.maxStreak = state.streak;
+
+    var xpGained = XP_PER_CORRECT;
+    if (state.streak >= 3) xpGained += XP_STREAK_BONUS;
+    if (state.streak >= 5) xpGained += XP_STREAK_BONUS;
+    if (state.streak >= 10) xpGained += XP_STREAK_BONUS * 2;
+
+    state.xp += xpGained;
+    state.score += xpGained;
+    checkLevelUp();
+
+    var encouragement = ENCOURAGEMENTS.correct[Math.floor(Math.random() * ENCOURAGEMENTS.correct.length)];
+    elements.feedback.textContent = encouragement + " +" + xpGained + " XP";
+    elements.feedback.className = "feedback correct";
+    elements.answerInput.classList.add("pulse");
+    setTimeout(function() { elements.answerInput.classList.remove("pulse"); }, 400);
+  }
+
+  function handleIncorrectAnswer(correctAnswer) {
+    state.streak = 0;
+
+    var reviewItem = {
+      verb: state.currentVerb.infinitive,
+      tense: state.currentTense.name,
+      pronoun: PRONOUNS[state.currentPronounIndex].fr,
+      correct: correctAnswer,
+      timestamp: Date.now(),
+    };
+    state.reviewList.unshift(reviewItem);
+    if (state.reviewList.length > 20) state.reviewList.pop();
+
+    elements.feedback.innerHTML = "La réponse : <strong>" + correctAnswer + "</strong>";
+    elements.feedback.className = "feedback incorrect";
+    elements.answerInput.classList.add("shake");
+    setTimeout(function() { elements.answerInput.classList.remove("shake"); }, 300);
+
+    updateReviewList();
+  }
+
+  function skipQuestion() {
+    var correctAnswer = state.currentVerb.tenses[state.currentTense.key][state.currentPronounIndex];
+    elements.feedback.innerHTML = "Réponse : <strong>" + correctAnswer + "</strong>";
+    elements.feedback.className = "feedback incorrect";
+    setTimeout(function() { generateNewQuestion(); }, 1500);
+  }
+
+  function checkLevelUp() {
+    var newLevel = Math.floor(state.xp / XP_PER_LEVEL) + 1;
+    if (newLevel > state.level) state.level = newLevel;
+  }
+
+  function startTimer() {
+    state.isTimerRunning = true;
+    state.timeRemaining = 60;
+    updateTimerDisplay();
+
+    state.timerInterval = setInterval(function() {
+      state.timeRemaining--;
+      updateTimerDisplay();
+      if (state.timeRemaining <= 0) endTimedMode();
+    }, 1000);
+  }
+
+  function endTimedMode() {
+    clearInterval(state.timerInterval);
+    state.isTimerRunning = false;
+    if (elements.timer) elements.timer.textContent = "Terminé! Score: " + state.score;
+  }
+
+  function updateTimerDisplay() {
+    if (elements.timer) elements.timer.textContent = state.timeRemaining + "s";
+  }
+
+  function updateUI() {
+    if (elements.levelValue) elements.levelValue.textContent = state.level;
+    if (elements.xpValue) elements.xpValue.textContent = state.xp;
+    if (elements.streakValue) elements.streakValue.textContent = state.streak;
+
+    var accuracy = state.total > 0 ? Math.round((state.correct / state.total) * 100) : 0;
+    if (elements.accuracyValue) elements.accuracyValue.textContent = accuracy + "%";
+    if (elements.scoreValue) elements.scoreValue.textContent = state.score;
+    if (elements.countValue) elements.countValue.textContent = state.correct + " / " + state.total;
+  }
+
+  function updateReviewList() {
+    if (!elements.reviewList) return;
+    if (state.reviewList.length === 0) {
+      elements.reviewList.innerHTML = '<p class="review-empty">Pas d\'erreurs!</p>';
+      return;
+    }
+
+    elements.reviewList.innerHTML = state.reviewList.slice(0, 10).map(function(item) {
+      return '<div class="review-item"><span>' + item.pronoun + '</span> ' +
+             '<span class="correct-answer">' + item.correct + '</span> ' +
+             '<span class="review-meta">(' + item.verb + ', ' + item.tense + ')</span></div>';
+    }).join("");
+  }
+
+  function setupEventListeners() {
+    document.querySelectorAll(".tab").forEach(function(tab) {
+      tab.addEventListener("click", function() {
+        var view = tab.dataset.view;
+        switchView(view);
+      });
+    });
+
+    if (elements.submitBtn) elements.submitBtn.addEventListener("click", checkAnswer);
+    if (elements.skipBtn) elements.skipBtn.addEventListener("click", skipQuestion);
+
+    if (elements.answerInput) {
+      elements.answerInput.addEventListener("keypress", function(e) {
+        if (e.key === "Enter") checkAnswer();
+      });
+    }
+
+    document.querySelectorAll(".mode-btn").forEach(function(btn) {
+      btn.addEventListener("click", function() {
+        document.querySelectorAll(".mode-btn").forEach(function(b) { b.classList.remove("active"); });
+        btn.classList.add("active");
+        state.mode = btn.dataset.mode;
+
+        if (state.mode === "timed") {
+          resetQuizState();
+          startTimer();
+        } else {
+          clearInterval(state.timerInterval);
+          if (elements.timer) elements.timer.textContent = "Ready";
+        }
+      });
+    });
+  }
+
+  function switchView(viewName) {
+    document.querySelectorAll(".tab").forEach(function(tab) {
+      tab.classList.toggle("active", tab.dataset.view === viewName);
+    });
+
+    document.querySelectorAll(".view").forEach(function(view) {
+      view.classList.toggle("active", view.id === viewName);
+    });
+
+    if (viewName === "quiz" && elements.answerInput) elements.answerInput.focus();
+  }
+
+  function resetQuizState() {
+    state.score = 0;
+    state.correct = 0;
+    state.total = 0;
+    state.streak = 0;
+    updateUI();
+  }
+
+  function saveProgress() {
+    var data = {
       xp: state.xp,
       level: state.level,
-      correct: state.correct,
-      total: state.total
-    })
-  );
-};
-
-const loadProgress = () => {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (!stored) return;
-  try {
-    const data = JSON.parse(stored);
-    state.score = data.score ?? 0;
-    state.streak = data.streak ?? 0;
-    state.xp = data.xp ?? 0;
-    state.level = data.level ?? 1;
-    state.correct = data.correct ?? 0;
-    state.total = data.total ?? 0;
-  } catch (error) {
-    console.error("Could not load progress", error);
-  }
-};
-
-const renderTables = () => {
-  els.tablesGrid.innerHTML = "";
-  TENSES.forEach((tense) => {
-    const verb = VERBS.find((item) => item.id === tense.exampleVerb);
-    if (!verb) return;
-    const tableRows = PRONOUNS.map(
-      (pronoun) => `
-        <tr>
-          <td>${pronoun.fr}</td>
-          <td>${pronoun.en}</td>
-          <td>${verb.conjugations[tense.id][pronoun.key]}</td>
-        </tr>
-      `
-    ).join("");
-
-    const card = document.createElement("div");
-    card.className = "card table-card";
-    card.innerHTML = `
-      <div>
-        <h3>${tense.fr}</h3>
-        <div class="tense-en">${tense.en}</div>
-      </div>
-      <div class="table-verb">${verb.fr} — ${verb.en}</div>
-      <table>
-        <tbody>
-          ${tableRows}
-        </tbody>
-      </table>
-    `;
-    els.tablesGrid.appendChild(card);
-  });
-};
-
-const pickQuestion = () => {
-  if (state.reviewPool.length > 0 && Math.random() < 0.35) {
-    return state.reviewPool.shift();
+      maxStreak: state.maxStreak,
+      reviewList: state.reviewList,
+    };
+    localStorage.setItem("tablequizz_progress", JSON.stringify(data));
   }
 
-  const verb = VERBS[Math.floor(Math.random() * VERBS.length)];
-  const tense = TENSES[Math.floor(Math.random() * TENSES.length)];
-  const pronoun = PRONOUNS[Math.floor(Math.random() * PRONOUNS.length)];
-  return { verb, tense, pronoun };
-};
-
-const showQuestion = () => {
-  state.current = pickQuestion();
-  const { verb, tense, pronoun } = state.current;
-  els.tenseLabel.textContent = `${tense.fr} · ${tense.en}`;
-  els.verbLabel.textContent = `${verb.fr} (${verb.en})`;
-  els.pronounFr.textContent = pronoun.fr;
-  els.pronounEn.textContent = pronoun.en;
-  els.answerInput.value = "";
-  els.answerInput.focus();
-  els.feedback.textContent = "";
-  els.feedback.className = "feedback";
-  updateReviewList();
-};
-
-const updateStats = () => {
-  els.scoreValue.textContent = state.score;
-  els.countValue.textContent = `${state.correct} / ${state.total}`;
-  els.levelValue.textContent = state.level;
-  els.xpValue.textContent = state.xp;
-  els.streakValue.textContent = state.streak;
-  const accuracy = state.total
-    ? Math.round((state.correct / state.total) * 100)
-    : 0;
-  els.accuracyValue.textContent = `${accuracy}%`;
-  saveProgress();
-};
-
-const updateLevel = () => {
-  const nextLevel = Math.floor(state.xp / 60) + 1;
-  if (nextLevel !== state.level) {
-    state.level = nextLevel;
-  }
-};
-
-const addToReview = (question) => {
-  if (!question) return;
-  state.reviewPool.push(question);
-  if (state.reviewPool.length > 12) {
-    state.reviewPool.shift();
-  }
-};
-
-const updateReviewList = () => {
-  const items = state.reviewPool.slice(0, 3).map((item) => {
-    return `${item.verb.fr} · ${item.tense.fr}`;
-  });
-  els.reviewList.innerHTML = items.length
-    ? items.map((text) => `<div>${text}</div>`).join("")
-    : "<div>All clear ✨</div>";
-};
-
-const showFeedback = (message, isGood) => {
-  els.feedback.textContent = message;
-  els.feedback.className = `feedback ${isGood ? "good" : "bad"}`;
-};
-
-const isTimedOver = () =>
-  state.mode === "timed" && state.timeLeft <= 0;
-
-const checkAnswer = () => {
-  if (!state.current) return;
-  if (isTimedOver()) {
-    showFeedback("Sprint finished. Switch mode to restart.", false);
-    return;
-  }
-  const { verb, tense, pronoun } = state.current;
-  const expected = verb.conjugations[tense.id][pronoun.key];
-  const answer = normalize(els.answerInput.value);
-  const normalizedExpected = normalize(expected);
-
-  state.total += 1;
-  if (answer && answer === normalizedExpected) {
-    state.correct += 1;
-    state.streak += 1;
-    state.score += 10 + Math.min(state.streak, 5);
-    state.xp += 10;
-    showFeedback("Bien joué! Paw points +10.", true);
-  } else {
-    state.streak = 0;
-    addToReview(state.current);
-    showFeedback(`Correct: ${expected}`, false);
-  }
-
-  updateLevel();
-  updateStats();
-  setTimeout(showQuestion, 800);
-};
-
-const skipQuestion = () => {
-  if (!state.current) return;
-  if (isTimedOver()) {
-    showFeedback("Sprint finished. Switch mode to restart.", false);
-    return;
-  }
-  state.total += 1;
-  state.streak = 0;
-  addToReview(state.current);
-  updateStats();
-  showFeedback("Skipped. It will come back soon.", false);
-  setTimeout(showQuestion, 500);
-};
-
-const setMode = (mode) => {
-  state.mode = mode;
-  els.modeButtons.forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.mode === mode);
-  });
-  if (mode === "timed") {
-    startTimer();
-  } else {
-    stopTimer();
-    els.timer.textContent = "Ready";
-  }
-};
-
-const startTimer = () => {
-  stopTimer();
-  state.timeLeft = 60;
-  els.timer.textContent = "01:00";
-  state.timerId = setInterval(() => {
-    state.timeLeft -= 1;
-    const minutes = String(Math.floor(state.timeLeft / 60)).padStart(2, "0");
-    const seconds = String(state.timeLeft % 60).padStart(2, "0");
-    els.timer.textContent = `${minutes}:${seconds}`;
-    if (state.timeLeft <= 0) {
-      stopTimer();
-      state.timeLeft = 0;
-      els.timer.textContent = "Time!";
-      showFeedback("Sprint finished. Switch mode to restart.", false);
+  function loadProgress() {
+    try {
+      var data = JSON.parse(localStorage.getItem("tablequizz_progress"));
+      if (data) {
+        state.xp = data.xp || 0;
+        state.level = data.level || 1;
+        state.maxStreak = data.maxStreak || 0;
+        state.reviewList = data.reviewList || [];
+      }
+    } catch (e) {
+      console.log("No saved progress found");
     }
-  }, 1000);
-};
-
-const stopTimer = () => {
-  if (state.timerId) {
-    clearInterval(state.timerId);
-    state.timerId = null;
   }
-};
 
-els.tabs.forEach((tab) => {
-  tab.addEventListener("click", () => {
-    const target = tab.dataset.view;
-    els.tabs.forEach((btn) => btn.classList.remove("active"));
-    tab.classList.add("active");
-    els.views.forEach((view) => {
-      view.classList.toggle("active", view.id === target);
-    });
-  });
-});
-
-els.submitBtn.addEventListener("click", checkAnswer);
-els.answerInput.addEventListener("keydown", (event) => {
-  if (event.key === "Enter") {
-    checkAnswer();
-  }
-});
-els.skipBtn.addEventListener("click", skipQuestion);
-
-els.modeButtons.forEach((btn) => {
-  btn.addEventListener("click", () => setMode(btn.dataset.mode));
-});
-
-loadProgress();
-renderTables();
-updateStats();
-setMode("practice");
-showQuestion();
+  document.addEventListener("DOMContentLoaded", init);
+})();
