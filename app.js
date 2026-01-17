@@ -2,21 +2,21 @@
 (function () {
   "use strict";
 
-  const state = {
+const state = {
     currentVerb: null,
     currentTense: null,
     currentPronounIndex: 0,
-    mode: "practice",
+  mode: "practice",
     isTimerRunning: false,
     timerInterval: null,
     timeRemaining: 60,
-    score: 0,
+  score: 0,
     correct: 0,
     total: 0,
-    streak: 0,
+  streak: 0,
     maxStreak: 0,
-    xp: 0,
-    level: 1,
+  xp: 0,
+  level: 1,
     reviewList: [],
     selectedVerbs: [],
     selectedTenses: [],
@@ -131,6 +131,24 @@
     return /^[aeiouhâêîôûéèëïüœ]/i.test(word);
   }
 
+  function getFlashPronoun(pronoun) {
+    switch (pronoun.fr) {
+      case "il/elle/on":
+        return { fr: "elle", en: "she" };
+      case "ils/elles":
+        return { fr: "ils", en: "they" };
+      case "tu":
+        return { fr: "tu", en: "you" };
+      case "vous":
+        return { fr: "vous", en: "you" };
+      case "nous":
+        return { fr: "nous", en: "we" };
+      case "je":
+      default:
+        return { fr: "je", en: "I" };
+    }
+  }
+
   function getPronounDisplay(pronoun, verb) {
     if (pronoun.elided && verbStartsWithVowel(verb)) return pronoun.elided;
     return pronoun.fr;
@@ -140,6 +158,59 @@
     var displayPronoun = getPronounDisplay(pronoun, verb);
     if (displayPronoun === "j'") return displayPronoun + conjugation;
     return displayPronoun + " " + conjugation;
+  }
+
+  function buildEnglishPrompt(verb, tenseKey, pronoun) {
+    var base = verb.english.replace(/^to\s+/, "").trim();
+    var subject = getFlashPronoun(pronoun).en;
+
+    var irregularPast = {
+      "be": "was",
+      "have": "had",
+      "go": "went",
+      "do": "did",
+      "make": "made",
+      "take": "took",
+      "come": "came",
+      "see": "saw",
+      "say": "said",
+      "know": "knew",
+      "leave": "left",
+      "put": "put",
+      "eat": "ate",
+      "speak": "spoke",
+      "be able to": "was able to",
+      "must": "had to"
+    };
+
+    var past = irregularPast[base];
+    if (!past) {
+      if (/e$/.test(base)) past = base + "d";
+      else if (/[^aeiou]y$/.test(base)) past = base.replace(/y$/, "ied");
+      else past = base + "ed";
+    }
+
+    var thirdSingular = base;
+    if (subject === "she" || subject === "he" || subject === "it") {
+      if (/[^aeiou]y$/.test(base)) thirdSingular = base.replace(/y$/, "ies");
+      else if (/s$|x$|z$|ch$|sh$/.test(base)) thirdSingular = base + "es";
+      else thirdSingular = base + "s";
+    }
+
+    switch (tenseKey) {
+      case "present":
+        return subject + " " + thirdSingular;
+      case "futurSimple":
+        return subject + " will " + base;
+      case "conditionnelPresent":
+        return subject + " would " + base;
+      case "subjonctifPresent":
+        return "that " + subject + " " + base;
+      case "passeCompose":
+      case "imparfait":
+      default:
+        return subject + " " + past;
+    }
   }
 
   function generateNewQuestion() {
@@ -218,10 +289,10 @@
 
   function normalizeAnswer(str) {
     return str.toLowerCase()
-      .trim()
+    .trim()
       .replace(/[’']/g, "")
       .replace(/\s+/g, " ")
-      .normalize("NFD")
+    .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "");
   }
 
@@ -270,7 +341,7 @@
     };
     state.reviewList.unshift(reviewItem);
     if (state.reviewList.length > 20) state.reviewList.pop();
-    updateReviewList();
+  updateReviewList();
   }
 
   function handleIncorrectAnswer(correctAnswer) {
@@ -485,22 +556,25 @@
     if (!elements.flashFront || !elements.flashBack) return;
     state.flashCurrent = generateFlashcard();
     var card = state.flashCurrent;
-    var frenchLine = buildFrenchLine(card.pronoun, card.conjugation, card.verb);
-    var prompt = card.pronoun.en + " — " + card.verb.english + " (" + card.tense.name + ")";
+    var flashPronoun = getFlashPronoun(card.pronoun);
+    var frenchLine = buildFrenchLine({ fr: flashPronoun.fr, elided: card.pronoun.elided }, card.conjugation, card.verb);
+    var englishPrompt = buildEnglishPrompt(card.verb, card.tenseKey, card.pronoun);
 
     if (state.flashMode === "en-fr") {
       elements.flashFront.innerHTML =
-        '<div><strong>EN → FR</strong></div>' +
-        '<div>' + prompt + '</div>';
+        '<div class="flash-title">Conjugate in French</div>' +
+        '<div class="flash-prompt">' + englishPrompt + '</div>' +
+        '<div class="flash-meta">' + card.verb.infinitive + " · " + card.tense.name + '</div>';
       elements.flashBack.innerHTML =
-        '<div>' + frenchLine + '</div>' +
+        '<div class="flash-answer">' + frenchLine + '</div>' +
         '<div class="feedback-explain">Build: ' + card.tense.formationEn + '</div>';
     } else {
       elements.flashFront.innerHTML =
-        '<div><strong>FR → EN</strong></div>' +
-        '<div>' + frenchLine + '</div>';
+        '<div class="flash-title">Translate to English</div>' +
+        '<div class="flash-prompt">' + frenchLine + '</div>' +
+        '<div class="flash-meta">' + card.verb.infinitive + " · " + card.tense.name + '</div>';
       elements.flashBack.innerHTML =
-        '<div>' + prompt + '</div>' +
+        '<div class="flash-answer">' + englishPrompt + '</div>' +
         '<div class="feedback-explain">Use: ' + card.tense.usageEn + '</div>';
     }
 
@@ -510,6 +584,7 @@
   function setFlashFlipped(flipped) {
     state.flashFlipped = flipped;
     elements.flashBack.classList.toggle("is-hidden", !flipped);
+    elements.flashFront.classList.toggle("is-hidden", flipped);
   }
 
   function handleFlashResult(isCorrect) {
@@ -531,8 +606,8 @@
       tab.addEventListener("click", function() {
         var view = tab.dataset.view;
         switchView(view);
-      });
-    });
+  });
+});
 
     if (elements.submitBtn) elements.submitBtn.addEventListener("click", checkAnswer);
     if (elements.skipBtn) elements.skipBtn.addEventListener("click", skipQuestion);

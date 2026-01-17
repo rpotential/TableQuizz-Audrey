@@ -755,7 +755,7 @@ button.ghost:hover,
 
 .flash-card {
   display: grid;
-  gap: var(--space-md);
+  gap: var(--space-lg);
 }
 
 .flash-face {
@@ -764,16 +764,42 @@ button.ghost:hover,
   border-radius: var(--radius-lg);
   background: #fff;
   border: 1px solid var(--pink-100);
-  font-size: 1.1rem;
+  font-size: 1.05rem;
   display: flex;
   align-items: center;
   justify-content: center;
   text-align: center;
+  flex-direction: column;
+  gap: var(--space-sm);
 }
 
 .flash-back {
   background: #fff7fb;
   font-weight: 600;
+}
+
+.flash-title {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--warm-400);
+}
+
+.flash-prompt {
+  font-family: var(--font-display);
+  font-size: 1.4rem;
+  color: var(--warm-800);
+}
+
+.flash-meta {
+  font-size: 0.85rem;
+  color: var(--warm-500);
+}
+
+.flash-answer {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  color: var(--pink-600);
 }
 
 .flash-face.is-hidden {
@@ -783,6 +809,7 @@ button.ghost:hover,
 .flash-actions {
   display: flex;
   gap: var(--space-sm);
+  justify-content: center;
 }
 
 @media (max-width: 900px) {
