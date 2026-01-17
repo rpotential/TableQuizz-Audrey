@@ -55,6 +55,7 @@
     setupEventListeners();
     generateNewQuestion();
     updateUI();
+    setQuizEnabled(true);
   }
 
   function renderTables() {
@@ -69,25 +70,26 @@
         var tenseKey = tenseEntry[0];
         var tense = tenseEntry[1];
         var card = createConjugationCard(verb, verbKey, tense, tenseKey);
-        grid.appendChild(card);
+        if (card) grid.appendChild(card);
       });
     });
   }
 
   function createConjugationCard(verb, verbKey, tense, tenseKey) {
+    var conjugations = verb.tenses[tenseKey];
+    if (!conjugations) return null;
+
     var card = document.createElement("div");
     card.className = "conjugation-card";
     card.dataset.tense = tenseKey;
     card.dataset.verb = verbKey;
 
-    var conjugations = verb.tenses[tenseKey];
-
     var tableRows = PRONOUNS.map(function(pronoun, i) {
       var shouldElide = pronoun.elided && verb.startsWithVowel;
       var displayPronoun = shouldElide ? pronoun.elided : pronoun.fr;
-      return '<tr><td class="pronoun-cell"><span class="pronoun-fr">' + displayPronoun + 
-             '</span><span class="pronoun-en">' + pronoun.en + 
-             '</span></td><td class="conjugation-cell">' + conjugations[i] + '</td></tr>';
+      var frenchLine = (shouldElide ? displayPronoun : displayPronoun + " ") + conjugations[i];
+      return '<tr><td class="french-cell">' + frenchLine + 
+             '</td><td class="english-cell">' + pronoun.en + '</td></tr>';
     }).join("");
 
     card.innerHTML = 
@@ -98,7 +100,10 @@
           '<span class="verb-badge">' + verb.group + '</span>' +
         '</div>' +
       '</div>' +
-      '<table class="conjugation-table"><tbody>' + tableRows + '</tbody></table>';
+      '<table class="conjugation-table">' +
+        '<thead><tr><th>Français</th><th>English</th></tr></thead>' +
+        '<tbody>' + tableRows + '</tbody>' +
+      '</table>';
 
     return card;
   }
@@ -142,6 +147,11 @@
   }
 
   function checkAnswer() {
+    if (isTimedOver()) {
+      elements.feedback.textContent = "Sprint finished. Switch mode to restart.";
+      elements.feedback.className = "feedback incorrect";
+      return;
+    }
     var userAnswer = elements.answerInput.value.trim().toLowerCase();
     var correctAnswer = state.currentVerb.tenses[state.currentTense.key][state.currentPronounIndex];
 
@@ -149,7 +159,12 @@
     var normalizedCorrect = normalizeAnswer(correctAnswer);
     var normalizedWithoutParens = normalizeAnswer(correctAnswer.replace(/\([^)]*\)/g, ""));
 
-    var isCorrect = normalizedUser === normalizedCorrect || normalizedUser === normalizedWithoutParens;
+    var answerVariants = buildAnswerVariants(correctAnswer, state.currentVerb, PRONOUNS[state.currentPronounIndex]);
+    var normalizedVariants = answerVariants.map(normalizeAnswer);
+
+    var isCorrect = normalizedUser === normalizedCorrect ||
+      normalizedUser === normalizedWithoutParens ||
+      normalizedVariants.indexOf(normalizedUser) !== -1;
 
     state.total++;
 
@@ -168,7 +183,26 @@
   }
 
   function normalizeAnswer(str) {
-    return str.toLowerCase().trim().replace(/\s+/g, " ").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return str.toLowerCase()
+      .trim()
+      .replace(/[’']/g, "")
+      .replace(/\s+/g, " ")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+  }
+
+  function buildAnswerVariants(answer, verb, pronoun) {
+    var variants = [answer, answer.replace(/\([^)]*\)/g, "")];
+    var pronounParts = pronoun.fr.split("/").map(function(item) { return item.trim(); }).filter(Boolean);
+    pronounParts.forEach(function(part) {
+      if (part === "je" && pronoun.elided && verb.startsWithVowel) {
+        variants.push(pronoun.elided + answer);
+        variants.push("je " + answer);
+      } else {
+        variants.push(part + " " + answer);
+      }
+    });
+    return variants;
   }
 
   function handleCorrectAnswer() {
@@ -192,9 +226,7 @@
     setTimeout(function() { elements.answerInput.classList.remove("pulse"); }, 400);
   }
 
-  function handleIncorrectAnswer(correctAnswer) {
-    state.streak = 0;
-
+  function addToReview(correctAnswer) {
     var reviewItem = {
       verb: state.currentVerb.infinitive,
       tense: state.currentTense.name,
@@ -204,19 +236,32 @@
     };
     state.reviewList.unshift(reviewItem);
     if (state.reviewList.length > 20) state.reviewList.pop();
+    updateReviewList();
+  }
 
+  function handleIncorrectAnswer(correctAnswer) {
+    state.streak = 0;
+    addToReview(correctAnswer);
     elements.feedback.innerHTML = "La réponse : <strong>" + correctAnswer + "</strong>";
     elements.feedback.className = "feedback incorrect";
     elements.answerInput.classList.add("shake");
     setTimeout(function() { elements.answerInput.classList.remove("shake"); }, 300);
-
-    updateReviewList();
   }
 
   function skipQuestion() {
+    if (isTimedOver()) {
+      elements.feedback.textContent = "Sprint finished. Switch mode to restart.";
+      elements.feedback.className = "feedback incorrect";
+      return;
+    }
+    state.total++;
+    state.streak = 0;
     var correctAnswer = state.currentVerb.tenses[state.currentTense.key][state.currentPronounIndex];
-    elements.feedback.innerHTML = "Réponse : <strong>" + correctAnswer + "</strong>";
+    addToReview(correctAnswer);
+    elements.feedback.innerHTML = "Skipped. Réponse : <strong>" + correctAnswer + "</strong>";
     elements.feedback.className = "feedback incorrect";
+    updateUI();
+    saveProgress();
     setTimeout(function() { generateNewQuestion(); }, 1500);
   }
 
@@ -229,6 +274,7 @@
     state.isTimerRunning = true;
     state.timeRemaining = 60;
     updateTimerDisplay();
+    setQuizEnabled(true);
 
     state.timerInterval = setInterval(function() {
       state.timeRemaining--;
@@ -240,11 +286,27 @@
   function endTimedMode() {
     clearInterval(state.timerInterval);
     state.isTimerRunning = false;
+    state.timeRemaining = 0;
     if (elements.timer) elements.timer.textContent = "Terminé! Score: " + state.score;
+    if (elements.feedback) {
+      elements.feedback.textContent = "Sprint finished. Switch mode to restart.";
+      elements.feedback.className = "feedback incorrect";
+    }
+    setQuizEnabled(false);
   }
 
   function updateTimerDisplay() {
     if (elements.timer) elements.timer.textContent = state.timeRemaining + "s";
+  }
+
+  function isTimedOver() {
+    return state.mode === "timed" && (!state.isTimerRunning || state.timeRemaining <= 0);
+  }
+
+  function setQuizEnabled(enabled) {
+    if (elements.answerInput) elements.answerInput.disabled = !enabled;
+    if (elements.submitBtn) elements.submitBtn.disabled = !enabled;
+    if (elements.skipBtn) elements.skipBtn.disabled = !enabled;
   }
 
   function updateUI() {
@@ -300,7 +362,10 @@
           startTimer();
         } else {
           clearInterval(state.timerInterval);
+          state.isTimerRunning = false;
+          state.timeRemaining = 60;
           if (elements.timer) elements.timer.textContent = "Ready";
+          setQuizEnabled(true);
         }
       });
     });

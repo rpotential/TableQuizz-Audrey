@@ -347,6 +347,17 @@ main {
   border-collapse: collapse;
 }
 
+.conjugation-table thead th {
+  text-align: left;
+  padding: var(--space-sm) var(--space-md);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--warm-400);
+  background: #fff7fb;
+  border-bottom: 1px solid var(--pink-100);
+}
+
 .conjugation-table tr {
   border-bottom: 1px solid var(--pink-50);
 }
@@ -360,25 +371,14 @@ main {
   font-size: 0.9rem;
 }
 
-.pronoun-cell {
-  width: 35%;
-  color: var(--warm-500);
-}
-
-.pronoun-fr {
-  font-weight: 500;
-  color: var(--warm-700);
-}
-
-.pronoun-en {
-  font-size: 0.75rem;
-  color: var(--warm-400);
-  display: block;
-}
-
-.conjugation-cell {
-  font-weight: 500;
+.french-cell {
+  font-weight: 600;
   color: var(--pink-600);
+}
+
+.english-cell {
+  color: var(--warm-500);
+  font-size: 0.85rem;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
